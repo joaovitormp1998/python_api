@@ -1,0 +1,83 @@
+variables:
+  DEPLOY_NAMESPACE: "g1learn"
+  DEPLOY_APP_NAME: "api-tutorcasts-app"
+
+
+deploy:
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  variables:
+    GIT_STRATEGY: none
+  image: bitnami/kubectl:latest
+  needs:
+    - job: build
+  script:
+    - echo "Deploying new application version version"
+    - kubectl rollout restart deployment api-tutorcasts-app -n g1learn
+    - kubectl rollout status deployment api-tutorcasts-app -n g1learn
+
+
+migration:
+  stage: .post
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  variables:
+    GIT_STRATEGY: none
+  image: bitnami/kubectl:latest
+  needs:
+    - job: deploy
+  script:
+    - echo "Runnning migrations"
+    - kubectl exec  -n g1learn $(kubectl get pods -l app=api-tutorcasts-app -n g1learn --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}') -- alembic upgrade head
+    - kubectl exec  -n g1learn $(kubectl get pods -l app=api-tutorcasts-app -n g1learn --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}') -- alembic current
+
+
+
+
+
+deploy-development:
+  stage: deploy
+  rules:
+    - if: $CI_COMMIT_BRANCH == "development"
+  variables:
+    GIT_STRATEGY: none
+  image: bitnami/kubectl:latest
+  needs:
+    - job: build
+  script:
+    - echo "Deploying new application version version"
+    - kubectl rollout restart deployment api-tutorcasts-app -n g1learn-development
+    - kubectl rollout status deployment api-tutorcasts-app -n g1learn-development
+
+
+migration-development:
+  stage: .post
+  rules:
+    - if: $CI_COMMIT_BRANCH == "development"
+  variables:
+    GIT_STRATEGY: none
+  image: bitnami/kubectl:latest
+  needs:
+    - job: deploy-development
+  script:
+    - echo "Runnning migrations"
+    - kubectl exec  -n g1learn-development $(kubectl get pods -l app=api-tutorcasts-app -n g1learn-development --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}') -- alembic upgrade head
+    - kubectl exec  -n g1learn-development $(kubectl get pods -l app=api-tutorcasts-app -n g1learn-development --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}') -- alembic current
+
+
+
+build:
+  stage: build
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "development"
+secret_detection:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+container_scanning:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+include:
+  - template: Auto-DevOps.gitlab-ci.yml
+
